@@ -1,37 +1,233 @@
--- Obfuscated Lua script for Delta X
+import asyncio
+import logging
+import mysql.connector
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+import random
+import string
+import requests
+import base64
+import threading
+from datetime import timedelta
+from dotenv import load_dotenv
+import os
 
-local function YBuFcl(data)
-    local t = 'ABCDEFGHIJ' .. 'KLMNOPQRSTUVWXYZ' .. 'abcdefghijklmnopqrstuvwxyz' .. '0123456789+/'
-    return string.gsub(data, '[^'..t..'=]', '')
-end
+# Load environment variables from .env
+load_dotenv()
 
-local function kokLsj(x)
-    local t = 'ABCDEFGHIJ' .. 'KLMNOPQRSTUVWXYZ' .. 'abcdefghijklmnopqrstuvwxyz' .. '0123456789+/'
-    if x == '=' then return '' end
-    local r, f = '', (t:find(x)-1)
-    for i=6, 1, -1 do
-        r = r .. (f%2^i-f%2^(i-1)>0 and '1' or '0')
-    end
-    return r
-end
+# Enable logging
+logging.basicConfig(level=logging.INFO)
 
-local function XWzEaZ(input)
-    local s1 = YBuFcl(input)
-    local s2 = s1:gsub('.', function(x) return kokLsj(x) end)
-    return s2:gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-        if #x ~= 8 then return '' end
-        local c = 0
-        for i=1, 8 do
-            c = c + (x:sub(i,i)=='1' and 2^(8-i) or 0)
-        end
-        return string.char(c)
-    end)
-end
+# Bot and GitHub settings from .env
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+OWNER = os.getenv('GITHUB_OWNER')
+REPO = os.getenv('GITHUB_REPO')
+FILE_PATH = os.getenv('GITHUB_FILE_PATH')
+BOT_LINK = os.getenv('BOT_LINK')  # Added BOT_LINK for keys.lua
 
-local pkOTFJ = "aW1wb3J0IGFzeW5jaW8KaW1wb3J0IGxvZ2dpbmcKaW1wb3J0IG15c3FsLmNvbm5lY3Rvcgpmcm9tIGFpb2dyYW0gaW1wb3J0IEJvdCwgRGlzcGF0Y2hlciwgdHlwZXMKZnJvbSBhaW9ncmFtLmZpbHRlcnMgaW1wb3J0IENvbW1hbmQKZnJvbSBhaW9ncmFtLnR5cGVzIGltcG9ydCBJbmxpbmVLZXlib2FyZEJ1dHRvbgpmcm9tIGFpb2dyYW0udXRpbHMua2V5Ym9hcmQgaW1wb3J0IElubGluZUtleWJvYXJkQnVpbGRlcgppbXBvcnQgcmFuZG9tCmltcG9ydCBzdHJpbmcKaW1wb3J0IHJlcXVlc3RzCmltcG9ydCBiYXNlNjQKaW1wb3J0IHRocmVhZGluZwpmcm9tIGRhdGV0aW1lIGltcG9ydCB0aW1lZGVsdGEKZnJvbSBkb3RlbnYgaW1wb3J0IGxvYWRfZG90ZW52CmltcG9ydCBvcwoKIyBMb2FkIGVudmlyb25tZW50IHZhcmlhYmxlcyBmcm9tIC5lbnYKbG9hZF9kb3RlbnYoKQoKIyBFbmFibGUgbG9nZ2luZwpsb2dnaW5nLmJhc2ljQ29uZmlnKGxldmVsPWxvZ2dpbmcuSU5GTykKCiMgQm90IGFuZCBHaXRIdWIgc2V0dGluZ3MgZnJvbSAuZW52CkJPVF9UT0tFTiA9IG9zLmdldGVudignQk9UX1RPS0VOJykKR0lUSFVCX1RPS0VOID0gb3MuZ2V0ZW52KCdHSVRIVUJfVE9LRU4nKQpPV05FUiA9IG9zLmdldGVudignR0lUSFVCX09XTkVSJykKUkVQTyA9IG9zLmdldGVudignR0lUSFVCX1JFUE8nKQpGSUxFX1BBVEggPSBvcy5nZXRlbnYoJ0dJVEhVQl9GSUxFX1BBVEgnKQpCT1RfTElOSyA9IG9zLmdldGVudignQk9UX0xJTksnKSAgIyBBZGRlZCBCT1RfTElOSyBmb3Iga2V5cy5sdWEKCiMgSW5pdGlhbGl6ZSBib3QgYW5kIGRpc3BhdGNoZXIKYm90ID0gQm90KHRva2VuPUJPVF9UT0tFTikKZHAgPSBEaXNwYXRjaGVyKCkKCiMgTXlTUUwgRGF0YWJhc2UgU2V0dXAgZnJvbSAuZW52CmRiX2NvbmZpZyA9IHsKICAgICdob3N0Jzogb3MuZ2V0ZW52KCdEQl9IT1NUJyksCiAgICAndXNlcic6IG9zLmdldGVudignREJfVVNFUicpLAogICAgJ3Bhc3N3b3JkJzogb3MuZ2V0ZW52KCdEQl9QQVNTV09SRCcpLAogICAgJ2RhdGFiYXNlJzogb3MuZ2V0ZW52KCdEQl9EQVRBQkFTRScpCn0KCmRlZiBnZXRfZGJfY29ubmVjdGlvbigpOgogICAgcmV0dXJuIG15c3FsLmNvbm5lY3Rvci5jb25uZWN0KCoqZGJfY29uZmlnKQoKIyBGdW5jdGlvbiB0byBnZXQgYWxsIGNoYW5uZWwgdXNlcm5hbWVzIGZyb20gREIgKHBhcnNlIGZyb20gZnVsbCBsaW5rcyBpZiBuZWVkZWQpCmRlZiBnZXRfY2hhbm5lbHMoKToKICAgIHRyeToKICAgICAgICBjb25uID0gZ2V0X2RiX2Nvbm5lY3Rpb24oKQogICAgICAgIGN1cnNvciA9IGNvbm4uY3Vyc29yKCkKICAgICAgICBjdXJzb3IuZXhlY3V0ZSgnU0VMRUNUIHVzZXJuYW1lIEZST00gY2hhbm5lbHMnKQogICAgICAgIHJhd19jaGFubmVscyA9IFtyb3dbMF0gZm9yIHJvdyBpbiBjdXJzb3IuZmV0Y2hhbGwoKV0KICAgICAgICBjdXJzb3IuY2xvc2UoKQogICAgICAgIGNvbm4uY2xvc2UoKQogICAgICAgICMgUGFyc2UgdG8gZ2V0IGNsZWFuIHVzZXJuYW1lIChlLmcuLCAncm9ibG94JyBmcm9tICdodHRwczovL3QubWUvcm9ibG94JykKICAgICAgICBjaGFubmVscyA9IFtdCiAgICAgICAgZm9yIGNoIGluIHJhd19jaGFubmVsczoKICAgICAgICAgICAgaWYgY2guc3RhcnRzd2l0aCgnaHR0cHM6Ly90Lm1lLycpOgogICAgICAgICAgICAgICAgY2ggPSBjaC5yZXBsYWNlKCdodHRwczovL3QubWUvJywgJycpLnN0cmlwKCcvJykKICAgICAgICAgICAgY2hhbm5lbHMuYXBwZW5kKGNoKQogICAgICAgIHJldHVybiBjaGFubmVscwogICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgIHByaW50KGYiREIgY2hhbm5lbHMgZmV0Y2ggZXJyb3I6IHtlfSIpCiAgICAgICAgcmV0dXJuIFtdCgojIEZ1bmN0aW9uIHRvIGdlbmVyYXRlIGEgcmFuZG9tIGtleQpkZWYgZ2VuZXJhdGVfa2V5KGxlbmd0aD0xMik6CiAgICBjaGFyYWN0ZXJzID0gc3RyaW5nLmFzY2lpX2xldHRlcnMgKyBzdHJpbmcuZGlnaXRzCiAgICByZXR1cm4gJycuam9pbihyYW5kb20uY2hvaWNlKGNoYXJhY3RlcnMpIGZvciBfIGluIHJhbmdlKGxlbmd0aCkpCgojIEZ1bmN0aW9uIHRvIGluc2VydCBuZXcga2V5IGludG8gREIgKHdpdGggdXNlZD0wKQpkZWYgaW5zZXJ0X2tleShrZXkpOgogICAgdHJ5OgogICAgICAgIGNvbm4gPSBnZXRfZGJfY29ubmVjdGlvbigpCiAgICAgICAgY3Vyc29yID0gY29ubi5jdXJzb3IoKQogICAgICAgIGN1cnNvci5leGVjdXRlKCdJTlNFUlQgSUdOT1JFIElOVE8gYGtleXNgIChga2V5YCwgYHVzZWRgKSBWQUxVRVMgKCVzLCAwKScsIChrZXksKSkKICAgICAgICBjb25uLmNvbW1pdCgpCiAgICAgICAgY3Vyc29yLmNsb3NlKCkKICAgICAgICBjb25uLmNsb3NlKCkKICAgICAgICBwcmludChmIk5ldyBrZXkgaW5zZXJ0ZWQ6IHtrZXl9IHdpdGggdXNlZD0wIikKICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICBwcmludChmIkRCIGluc2VydCBlcnJvcjoge2V9IikKCiMgRnVuY3Rpb24gdG8gaW5jcmVtZW50IHVzZWQgKHJlcXVlc3QgY291bnQpIGZvciBhIGtleQpkZWYgaW5jcmVtZW50X3JlcXVlc3RfY291bnQoa2V5KToKICAgIHRyeToKICAgICAgICBjb25uID0gZ2V0X2RiX2Nvbm5lY3Rpb24oKQogICAgICAgIGN1cnNvciA9IGNvbm4uY3Vyc29yKCkKICAgICAgICBjdXJzb3IuZXhlY3V0ZSgnVVBEQVRFIGBrZXlzYCBTRVQgYHVzZWRgID0gYHVzZWRgICsgMSBXSEVSRSBga2V5YCA9ICVzJywgKGtleSwpKQogICAgICAgIGNvbm4uY29tbWl0KCkKICAgICAgICBpZiBjdXJzb3Iucm93Y291bnQgPT0gMDoKICAgICAgICAgICAgcHJpbnQoZiJXYXJuaW5nOiBLZXkge2tleX0gbm90IGZvdW5kIGluIERCIGZvciB1cGRhdGUuIikKICAgICAgICBjdXJzb3IuY2xvc2UoKQogICAgICAgIGNvbm4uY2xvc2UoKQogICAgICAgIHByaW50KGYiVXNlZCBjb3VudCBpbmNyZW1lbnRlZCBmb3Iga2V5OiB7a2V5fSIpCiAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgcHJpbnQoZiJEQiB1cGRhdGUgZXJyb3I6IHtlfSIpCgojIEZ1bmN0aW9uIHRvIHVwZGF0ZSBHaXRIdWIgZmlsZSB3aXRoIG5ldyBrZXkgYW5kIGJvdCBsaW5rCmRlZiB1cGRhdGVfZ2l0aHViX2tleShrZXkpOgogICAgdXJsID0gZiJodHRwczovL2FwaS5naXRodWIuY29tL3JlcG9zL3tPV05FUn0ve1JFUE99L2NvbnRlbnRzL3tGSUxFX1BBVEh9IgogICAgaGVhZGVycyA9IHsKICAgICAgICAnQXV0aG9yaXphdGlvbic6IGYndG9rZW4ge0dJVEhVQl9UT0tFTn0nLAogICAgICAgICdBY2NlcHQnOiAnYXBwbGljYXRpb24vdm5kLmdpdGh1Yi52Mytqc29uJwogICAgfQogICAgY29udGVudCA9IGYncmV0dXJuIHt7XG4gICAga2V5ID0gIntrZXl9IixcbiAgICBib3RMaW5rID0gIntCT1RfTElOS30iXG59fScKICAgIGVuY29kZWRfY29udGVudCA9IGJhc2U2NC5iNjRlbmNvZGUoY29udGVudC5lbmNvZGUoJ3V0Zi04JykpLmRlY29kZSgndXRmLTgnKQoKICAgICMgR2V0IFNIQSBvZiBjdXJyZW50IGZpbGUKICAgIHJlc3BvbnNlID0gcmVxdWVzdHMuZ2V0KHVybCwgaGVhZGVycz1oZWFkZXJzKQogICAgaWYgcmVzcG9uc2Uuc3RhdHVzX2NvZGUgPT0gMjAwOgogICAgICAgIHNoYSA9IHJlc3BvbnNlLmpzb24oKVsnc2hhJ10KICAgIGVsc2U6CiAgICAgICAgc2hhID0gTm9uZSAgIyBJZiBmaWxlIG5vdCBleGlzdHMsIGNyZWF0ZSBuZXcKICAgICAgICBwcmludChmIkdpdEh1YiBHRVQgcmVzcG9uc2U6IHtyZXNwb25zZS5zdGF0dXNfY29kZX0gLSB7cmVzcG9uc2UudGV4dH0iKQoKICAgIGRhdGEgPSB7CiAgICAgICAgJ21lc3NhZ2UnOiAnVXBkYXRlIGN1cnJlbnQga2V5IGFuZCBib3QgbGluaycsCiAgICAgICAgJ2NvbnRlbnQnOiBlbmNvZGVkX2NvbnRlbnQsCiAgICAgICAgJ3NoYSc6IHNoYSBpZiBzaGEgZWxzZSBOb25lCiAgICB9CiAgICByZXNwb25zZSA9IHJlcXVlc3RzLnB1dCh1cmwsIGhlYWRlcnM9aGVhZGVycywganNvbj1kYXRhKQogICAgaWYgcmVzcG9uc2Uuc3RhdHVzX2NvZGUgPT0gMjAwIG9yIHJlc3BvbnNlLnN0YXR1c19jb2RlID09IDIwMToKICAgICAgICBwcmludChmIkdpdEh1YiBmaWxlIHVwZGF0ZWQgd2l0aCBrZXk6IHtrZXl9IGFuZCBib3RMaW5rOiB7Qk9UX0xJTkt9IikKICAgIGVsc2U6CiAgICAgICAgcHJpbnQoZiJFcnJvciB1cGRhdGluZyBHaXRIdWI6IHtyZXNwb25zZS5zdGF0dXNfY29kZX0gLSB7cmVzcG9uc2UudGV4dH0iKQoKIyBGdW5jdGlvbiB0byBnZXQgQ1VSUkVOVCBrZXkgZnJvbSBHaXRIdWIgKGZvciAvZ2V0a2V5KQpkZWYgZ2V0X2N1cnJlbnRfa2V5KCk6CiAgICB1cmwgPSBmImh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3Mve09XTkVSfS97UkVQT30vY29udGVudHMve0ZJTEVfUEFUSH0iCiAgICBoZWFkZXJzID0gewogICAgICAgICdBdXRob3JpemF0aW9uJzogZid0b2tlbiB7R0lUSFVCX1RPS0VOfScsCiAgICAgICAgJ0FjY2VwdCc6ICdhcHBsaWNhdGlvbi92bmQuZ2l0aHViLnYzK2pzb24nCiAgICB9CiAgICByZXNwb25zZSA9IHJlcXVlc3RzLmdldCh1cmwsIGhlYWRlcnM9aGVhZGVycykKICAgIGlmIHJlc3BvbnNlLnN0YXR1c19jb2RlID09IDIwMDoKICAgICAgICBlbmNvZGVkX2NvbnRlbnQgPSByZXNwb25zZS5qc29uKClbJ2NvbnRlbnQnXQogICAgICAgIGNvbnRlbnQgPSBiYXNlNjQuYjY0ZGVjb2RlKGVuY29kZWRfY29udGVudCkuZGVjb2RlKCd1dGYtOCcpCiAgICAgICAgIyBQYXJzZSBrZXkgZnJvbSAncmV0dXJuIHtrZXkgPSAia2V5IiwgYm90TGluayA9ICJsaW5rIn0nIGZvcm1hdAogICAgICAgIGlmICdyZXR1cm4geycgaW4gY29udGVudDoKICAgICAgICAgICAga2V5ID0gY29udGVudC5zcGxpdCgna2V5ID0gIicpWzFdLnNwbGl0KCciJylbMF0gICMgRXh0cmFjdCBrZXkKICAgICAgICAgICAgcHJpbnQoZiJDdXJyZW50IGtleSBmZXRjaGVkOiB7a2V5fSIpCiAgICAgICAgICAgIHJldHVybiBrZXkKICAgICAgICBlbHNlOgogICAgICAgICAgICByYWlzZSBFeGNlcHRpb24oIkludmFsaWQgY29udGVudCBmb3JtYXQgaW4ga2V5cy5sdWEiKQogICAgZWxzZToKICAgICAgICByYWlzZSBFeGNlcHRpb24oZiJGYWlsZWQgdG8gZmV0Y2ggZmlsZToge3Jlc3BvbnNlLnN0YXR1c19jb2RlfSAtIHtyZXNwb25zZS50ZXh0fSIpCgojIEJhY2tncm91bmQgdGFzayB0byBjaGFuZ2Uga2V5IGV2ZXJ5IDEgZGF5IChmb3IgcHJvZDsgY2hhbmdlIHRvIDMgZGF5cyBpZiBuZWVkZWQpCmFzeW5jIGRlZiBjaGFuZ2Vfa2V5X3BlcmlvZGljYWxseSgpOgogICAgd2hpbGUgVHJ1ZToKICAgICAgICBrZXkgPSBnZW5lcmF0ZV9rZXkoKQogICAgICAgIGluc2VydF9rZXkoa2V5KSAgIyBJbnNlcnQgbmV3IGtleSB3aXRoIHVzZWQ9MAogICAgICAgIHVwZGF0ZV9naXRodWJfa2V5KGtleSkKICAgICAgICBwcmludChmIkJhY2tncm91bmQga2V5IGNoYW5nZWQgdG86IHtrZXl9IikKICAgICAgICAjIEZvciBwcm9kOiAxIGRheQogICAgICAgIGF3YWl0IGFzeW5jaW8uc2xlZXAodGltZWRlbHRhKGRheXM9MSkudG90YWxfc2Vjb25kcygpKQogICAgICAgICMgRm9yIHRlc3Q6IDUgbWluICgzMDAgc2VjKSAtIGNvbW1lbnRlZCBvdXQKICAgICAgICAjIGF3YWl0IGFzeW5jaW8uc2xlZXAoMzAwKQogICAgICAgICMgRm9yIHByb2QgKDMgZGF5cyk6IGF3YWl0IGFzeW5jaW8uc2xlZXAodGltZWRlbHRhKGRheXM9MykudG90YWxfc2Vjb25kcygpKSAgIyAyNTkyMDAgc2VjCgpAZHAubWVzc2FnZShDb21tYW5kKCJzdGFydCIpKQphc3luYyBkZWYgc3RhcnRfaGFuZGxlcihtZXNzYWdlOiB0eXBlcy5NZXNzYWdlKToKICAgIGF3YWl0IG1lc3NhZ2UucmVwbHkoCiAgICAgICAgJ9Cf0YDQuNCy0LXRgiEg8J+Ht/Cfh7pcbicKICAgICAgICAn0JjRgdC/0L7Qu9GM0LfRg9C5IC9nZXRrZXksINGH0YLQvtCx0Ysg0L/QvtC70YPRh9C40YLRjCDQutC70Y7RhyDQtNC70Y8g0LDQutGC0LjQstCw0YbQuNC4IGtleSBzeXN0ZW0uXG5cbicKICAgICAgICAnSGkhIPCfh6zwn4enXG4nCiAgICAgICAgJ1VzZSAvZ2V0a2V5IHRvIGdldCB0aGUga2V5IHRvIGFjdGl2YXRlIHRoZSBrZXkgc3lzdGVtLicKICAgICkKCkBkcC5tZXNzYWdlKENvbW1hbmQoImdldGtleSIpKQphc3luYyBkZWYgZ2V0a2V5X2hhbmRsZXIobWVzc2FnZTogdHlwZXMuTWVzc2FnZSk6CiAgICBjaGFubmVscyA9IGdldF9jaGFubmVscygpCiAgICBpZiBub3QgY2hhbm5lbHM6CiAgICAgICAgYXdhaXQgbWVzc2FnZS5yZXBseSgn0J3QtdGCINC90LDRgdGC0YDQvtC10L3QvdGL0YUg0LrQsNC90LDQu9C+0LIuINCe0LHRgNCw0YLQuNGC0LXRgdGMINC6INCw0LTQvNC40L3Rgy4nKQogICAgICAgIHJldHVybgoKICAgIGJ1aWxkZXIgPSBJbmxpbmVLZXlib2FyZEJ1aWxkZXIoKQogICAgZm9yIGNoIGluIGNoYW5uZWxzOgogICAgICAgIGJ1aWxkZXIucm93KElubGluZUtleWJvYXJkQnV0dG9uKHRleHQ9ItCf0L7QtNC/0LjRgdCw0YLRjNGB0Y8iLCB1cmw9ZiJodHRwczovL3QubWUve2NofSIpKQogICAgYnVpbGRlci5yb3coSW5saW5lS2V5Ym9hcmRCdXR0b24odGV4dD0i0J/RgNC+0LLQtdGA0LjRgtGMIiwgY2FsbGJhY2tfZGF0YT0iY2hlY2tfc3Vic2NyaXB0aW9uIikpCgogICAgYXdhaXQgbWVzc2FnZS5yZXBseSgKICAgICAgICAn0J/QvtC00L/QuNGI0LjRgdGMINC4INC/0L7Qu9GD0YfQuCDQutC70Y7Rh1xuJwogICAgICAgICdTdWJzY3JpYmUgYW5kIGdldCB0aGUga2V5JywKICAgICAgICByZXBseV9tYXJrdXA9YnVpbGRlci5hc19tYXJrdXAoKQogICAgKQoKQGRwLmNhbGxiYWNrX3F1ZXJ5KGxhbWJkYSBjOiBjLmRhdGEgPT0gJ2NoZWNrX3N1YnNjcmlwdGlvbicpCmFzeW5jIGRlZiBjaGVja19zdWJzY3JpcHRpb24oY2FsbGJhY2s6IHR5cGVzLkNhbGxiYWNrUXVlcnkpOgogICAgY2hhbm5lbHMgPSBnZXRfY2hhbm5lbHMoKQogICAgaWYgbm90IGNoYW5uZWxzOgogICAgICAgIGF3YWl0IGNhbGxiYWNrLmFuc3dlcign0J3QtdGCINC90LDRgdGC0YDQvtC10L3QvdGL0YUg0LrQsNC90LDQu9C+0LIuJykKICAgICAgICByZXR1cm4KCiAgICB1c2VyX2lkID0gY2FsbGJhY2suZnJvbV91c2VyLmlkCiAgICBzdWJzY3JpYmVkID0gVHJ1ZQogICAgZm9yIGNoIGluIGNoYW5uZWxzOgogICAgICAgIGNoYXRfaWQgPSBmJ0B7Y2h9JwogICAgICAgIHRyeToKICAgICAgICAgICAgbWVtYmVyID0gYXdhaXQgYm90LmdldF9jaGF0X21lbWJlcihjaGF0X2lkLCB1c2VyX2lkKQogICAgICAgICAgICBpZiBtZW1iZXIuc3RhdHVzIG5vdCBpbiBbJ21lbWJlcicsICdjcmVhdG9yJywgJ2FkbWluaXN0cmF0b3InXToKICAgICAgICAgICAgICAgIHN1YnNjcmliZWQgPSBGYWxzZQogICAgICAgICAgICAgICAgYnJlYWsKICAgICAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgICAgIHByaW50KGYiRXJyb3IgY2hlY2tpbmcgc3Vic2NyaXB0aW9uIGZvciB7Y2h9OiB7ZX0iKQogICAgICAgICAgICBzdWJzY3JpYmVkID0gRmFsc2UKICAgICAgICAgICAgYnJlYWsKCiAgICBpZiBzdWJzY3JpYmVkOgogICAgICAgIHRyeToKICAgICAgICAgICAga2V5ID0gZ2V0X2N1cnJlbnRfa2V5KCkKICAgICAgICAgICAgaW5jcmVtZW50X3JlcXVlc3RfY291bnQoa2V5KQogICAgICAgICAgICBhd2FpdCBjYWxsYmFjay5tZXNzYWdlLnJlcGx5KAogICAgICAgICAgICAgICAgZicqKtCS0LDRiCDRgtC10LrRg9GJ0LjQuSDQutC70Y7RhzogKipge2tleX1gKipcbicKICAgICAgICAgICAgICAgIGYnKipZb3VyIGN1cnJlbnQga2V5OiAqKmB7a2V5fWAqKlxuXG4nCiAgICAgICAgICAgICAgICBmJyoq8J+Ht/Cfh7og0KHQutC+0L/QuNGA0YPQuSDQuCDQstGB0YLQsNCy0Ywg0LXQs9C+INCyINC60LXQuSDRgdC40YHRgtC10LzRgyoqXG5cbicKICAgICAgICAgICAgICAgIGYnKirwn4es8J+HpyBDb3B5IGFuZCBwYXN0ZSBpdCBpbnRvIHlvdXIga2V5IHN5c3RlbSoqJywKICAgICAgICAgICAgICAgIHBhcnNlX21vZGU9J01hcmtkb3duVjInCiAgICAgICAgICAgICkKICAgICAgICAgICAgYXdhaXQgY2FsbGJhY2suYW5zd2VyKCfQmtC70Y7RhyDQstGL0LTQsNC9IScpCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgICAgICBhd2FpdCBjYWxsYmFjay5hbnN3ZXIoZifQntGI0LjQsdC60LA6IHtzdHIoZSl9JykKICAgIGVsc2U6CiAgICAgICAgYXdhaXQgY2FsbGJhY2suYW5zd2VyKCfQktGLINC90LUg0L/QvtC00L/QuNGB0LDQvdGLINC90LAg0LLRgdC1INC60LDQvdCw0LvRiyEnKQoKYXN5bmMgZGVmIG1haW4oKToKICAgICMgU3RhcnQga2V5IGNoYW5nZXIgaW4gYmFja2dyb3VuZAogICAgYXN5bmNpby5jcmVhdGVfdGFzayhjaGFuZ2Vfa2V5X3BlcmlvZGljYWxseSgpKQogICAgYXdhaXQgZHAuc3RhcnRfcG9sbGluZyhib3QpCgppZiBfX25hbWVfXyA9PSAnX19tYWluX18nOgogICAgYXN5bmNpby5ydW4obWFpbigpKQ=="
-local EIzpkQ = XWzEaZ(pkOTFJ)
-if EIzpkQ then
-    loadstring(EIzpkQ)()
-else
-    error("Failed to decode script")
-end
+# Initialize bot and dispatcher
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+# MySQL Database Setup from .env
+db_config = {
+    'host': os.getenv('DB_HOST'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'database': os.getenv('DB_DATABASE')
+}
+
+def get_db_connection():
+    return mysql.connector.connect(**db_config)
+
+# Function to get all channel usernames from DB (parse from full links if needed)
+def get_channels():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT username FROM channels')
+        raw_channels = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        # Parse to get clean username (e.g., 'roblox' from 'https://t.me/roblox')
+        channels = []
+        for ch in raw_channels:
+            if ch.startswith('https://t.me/'):
+                ch = ch.replace('https://t.me/', '').strip('/')
+            channels.append(ch)
+        return channels
+    except Exception as e:
+        print(f"DB channels fetch error: {e}")
+        return []
+
+# Function to generate a random key
+def generate_key(length=12):
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
+# Function to insert new key into DB (with used=0)
+def insert_key(key):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('INSERT IGNORE INTO `keys` (`key`, `used`) VALUES (%s, 0)', (key,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"New key inserted: {key} with used=0")
+    except Exception as e:
+        print(f"DB insert error: {e}")
+
+# Function to increment used (request count) for a key
+def increment_request_count(key):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE `keys` SET `used` = `used` + 1 WHERE `key` = %s', (key,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            print(f"Warning: Key {key} not found in DB for update.")
+        cursor.close()
+        conn.close()
+        print(f"Used count incremented for key: {key}")
+    except Exception as e:
+        print(f"DB update error: {e}")
+
+# Function to update GitHub file with new key and bot link
+def update_github_key(key):
+    url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{FILE_PATH}"
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    content = f'return {{\n    key = "{key}",\n    botLink = "{BOT_LINK}"\n}}'
+    encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+
+    # Get SHA of current file
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        sha = response.json()['sha']
+    else:
+        sha = None  # If file not exists, create new
+        print(f"GitHub GET response: {response.status_code} - {response.text}")
+
+    data = {
+        'message': 'Update current key and bot link',
+        'content': encoded_content,
+        'sha': sha if sha else None
+    }
+    response = requests.put(url, headers=headers, json=data)
+    if response.status_code == 200 or response.status_code == 201:
+        print(f"GitHub file updated with key: {key} and botLink: {BOT_LINK}")
+    else:
+        print(f"Error updating GitHub: {response.status_code} - {response.text}")
+
+# Function to get CURRENT key from GitHub (for /getkey)
+def get_current_key():
+    url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{FILE_PATH}"
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        encoded_content = response.json()['content']
+        content = base64.b64decode(encoded_content).decode('utf-8')
+        # Parse key from 'return {key = "key", botLink = "link"}' format
+        if 'return {' in content:
+            key = content.split('key = "')[1].split('"')[0]  # Extract key
+            print(f"Current key fetched: {key}")
+            return key
+        else:
+            raise Exception("Invalid content format in keys.lua")
+    else:
+        raise Exception(f"Failed to fetch file: {response.status_code} - {response.text}")
+
+# Background task to change key every 1 day (for prod; change to 3 days if needed)
+async def change_key_periodically():
+    while True:
+        key = generate_key()
+        insert_key(key)  # Insert new key with used=0
+        update_github_key(key)
+        print(f"Background key changed to: {key}")
+        # For prod: 1 day
+        await asyncio.sleep(timedelta(days=1).total_seconds())
+        # For test: 5 min (300 sec) - commented out
+        # await asyncio.sleep(300)
+        # For prod (3 days): await asyncio.sleep(timedelta(days=3).total_seconds())  # 259200 sec
+
+@dp.message(Command("start"))
+async def start_handler(message: types.Message):
+    await message.reply(
+        'Привет! 🇷🇺\n'
+        'Используй /getkey, чтобы получить ключ для активации key system.\n\n'
+        'Hi! 🇬🇧\n'
+        'Use /getkey to get the key to activate the key system.'
+    )
+
+@dp.message(Command("getkey"))
+async def getkey_handler(message: types.Message):
+    channels = get_channels()
+    if not channels:
+        await message.reply('Нет настроенных каналов. Обратитесь к админу.')
+        return
+
+    builder = InlineKeyboardBuilder()
+    for ch in channels:
+        builder.row(InlineKeyboardButton(text="Подписаться", url=f"https://t.me/{ch}"))
+    builder.row(InlineKeyboardButton(text="Проверить", callback_data="check_subscription"))
+
+    await message.reply(
+        'Подпишись и получи ключ\n'
+        'Subscribe and get the key',
+        reply_markup=builder.as_markup()
+    )
+
+@dp.callback_query(lambda c: c.data == 'check_subscription')
+async def check_subscription(callback: types.CallbackQuery):
+    channels = get_channels()
+    if not channels:
+        await callback.answer('Нет настроенных каналов.')
+        return
+
+    user_id = callback.from_user.id
+    subscribed = True
+    for ch in channels:
+        chat_id = f'@{ch}'
+        try:
+            member = await bot.get_chat_member(chat_id, user_id)
+            if member.status not in ['member', 'creator', 'administrator']:
+                subscribed = False
+                break
+        except Exception as e:
+            print(f"Error checking subscription for {ch}: {e}")
+            subscribed = False
+            break
+
+    if subscribed:
+        try:
+            key = get_current_key()
+            increment_request_count(key)
+            await callback.message.reply(
+                f'**Ваш текущий ключ: **`{key}`**\n'
+                f'**Your current key: **`{key}`**\n\n'
+                f'**🇷🇺 Скопируй и вставь его в кей систему**\n\n'
+                f'**🇬🇧 Copy and paste it into your key system**',
+                parse_mode='MarkdownV2'
+            )
+            await callback.answer('Ключ выдан!')
+        except Exception as e:
+            await callback.answer(f'Ошибка: {str(e)}')
+    else:
+        await callback.answer('Вы не подписаны на все каналы!')
+
+async def main():
+    # Start key changer in background
+    asyncio.create_task(change_key_periodically())
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
